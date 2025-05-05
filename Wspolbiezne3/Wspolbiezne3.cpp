@@ -241,18 +241,20 @@ void drawPolyline(BMP& bmp, const std::vector<Point>& points, int thickness, uin
     }
 }
 
+
 int main() {
-    const char filename[] = "test2.bmp";  // Przykładowa nazwa pliku BMP
+    const char filename[] = "test2.bmp";
     const char outSeq[] = "out_seq.bmp";
     const char outThreaded[] = "out_threaded.bmp";
     const char outOmp[] = "out_omp.bmp";
     int x1, y1, x2, y2, thick;
-    int numPoints, maxX = 800, maxY = 600; // Zakres współrzędnych dla losowych punktów
+    int numPoints, maxX, maxY;
     std::string csvFile;
 
     try {
         BMP bmp = readBMP(filename);
-
+        maxX = bmp.infoHeader.width;
+        maxY = bmp.infoHeader.height;
         std::cout << "Wybierz scenariusz:" << std::endl;
         std::cout << "1. Wczytanie punktów z pliku CSV" << std::endl;
         std::cout << "2. Generowanie punktów losowo" << std::endl;
@@ -262,17 +264,17 @@ int main() {
         std::vector<Point> points;
 
         if (choice == 1) {
-            std::cout << "Podaj nazwę pliku CSV: ";
+            std::cout << "Podaj nazwe pliku CSV: ";
             std::cin >> csvFile;
             points = readPointsFromCSV(csvFile);
         }
         else if (choice == 2) {
-            std::cout << "Podaj liczbę punktów: ";
+            std::cout << "Podaj liczbe punktow: ";
             std::cin >> numPoints;
             points = generateRandomPoints(numPoints, maxX, maxY);
         }
         else {
-            throw std::invalid_argument("Niepoprawny wybór.");
+            throw std::invalid_argument("Niepoprawny wybor.");
         }
 
         std::cout << "Podaj grubosc łamanej [px]: ";
@@ -282,8 +284,9 @@ int main() {
 
         // SEKWENCYJNIE
         BMP bmp1 = readBMP(filename);
-        LARGE_INTEGER start, end,frequency;
+        LARGE_INTEGER start, end, frequency;
 		QueryPerformanceFrequency(&frequency);
+
         QueryPerformanceCounter(&start);
         drawPolyline(bmp1, points, thick, 255, 0, 0);
         QueryPerformanceCounter(&end);
@@ -299,7 +302,7 @@ int main() {
         drawPolyline(bmp2, points, thick, 0, 255, 0);
         QueryPerformanceCounter(&end);
         double t_thr = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
-        std::cout << "Czas THREADED (4 watki): " << t_thr << " ms\n";
+        std::cout << "Czas THREADED(" << watki << " watki): " << t_thr << " ms\n";
         saveBMP(outThreaded, bmp2);
         delete[] bmp2.data;
 
@@ -320,3 +323,4 @@ int main() {
 
     return 0;
 }
+
