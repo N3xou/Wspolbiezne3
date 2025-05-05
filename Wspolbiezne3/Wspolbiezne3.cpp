@@ -118,8 +118,7 @@ void drawLine(BMP& bmp, int x1, int y1, int x2, int y2, int thickness, uint8_t r
         if (e2 < dx) { err += dx; y1 += sy; }
     }
 }
-
-void drawLineOpenMP(BMP& bmp, int x1, int y1, int x2, int y2, int thickness, uint8_t r, uint8_t g, uint8_t b) {
+void drawLineOpenMP(BMP& bmp, int x1, int y1, int x2, int y2, int thickness, uint8_t r, uint8_t g, uint8_t b, int numThreads) {
     std::vector<std::pair<int, int>> points;
 
     int dx = abs(x2 - x1), dy = abs(y2 - y1);
@@ -138,24 +137,34 @@ void drawLineOpenMP(BMP& bmp, int x1, int y1, int x2, int y2, int thickness, uin
 
     int rowSize = ((bmp.infoHeader.bitCount * bmp.infoHeader.width + 31) / 32) * 4;
 
+
+    int chunkSize = points.size() / numThreads;
+    int remainder = points.size() % numThreads;
+
 #pragma omp parallel for
-    for (int i = 0; i < points.size(); ++i) {
-        int x = points[i].first;
-        int y = points[i].second;
-        for (int tx = -thickness / 2; tx <= thickness / 2; ++tx) {
-            for (int ty = -thickness / 2; ty <= thickness / 2; ++ty) {
-                int px = x + tx;
-                int py = y + ty;
-                if (px >= 0 && px < bmp.infoHeader.width && py >= 0 && py < bmp.infoHeader.height) {
-                    int index = py * rowSize + px * 3;
-                    bmp.data[index] = b;
-                    bmp.data[index + 1] = g;
-                    bmp.data[index + 2] = r;
+    for (int t = 0; t < numThreads; ++t) {
+        int start = t * chunkSize;
+        int end = (t == numThreads - 1) ? points.size() : start + chunkSize + (t < remainder ? 1 : 0);
+
+        for (int i = start; i < end; ++i) {
+            int x = points[i].first;
+            int y = points[i].second;
+            for (int tx = -thickness / 2; tx <= thickness / 2; ++tx) {
+                for (int ty = -thickness / 2; ty <= thickness / 2; ++ty) {
+                    int px = x + tx;
+                    int py = y + ty;
+                    if (px >= 0 && px < bmp.infoHeader.width && py >= 0 && py < bmp.infoHeader.height) {
+                        int index = py * rowSize + px * 3;
+                        bmp.data[index] = b;
+                        bmp.data[index + 1] = g;
+                        bmp.data[index + 2] = r;
+                    }
                 }
             }
         }
     }
 }
+
 void drawLineThreaded(BMP& bmp, int x1, int y1, int x2, int y2, int thickness, uint8_t r, uint8_t g, uint8_t b, int numThreads) {
     std::vector<std::pair<int, int>> points;
 
@@ -241,54 +250,44 @@ void drawPolyline(BMP& bmp, const std::vector<Point>& points, int thickness, uin
     }
 }
 
-
 int main() {
+    int x1, y1, x2, y2, thick,watki;
+
     const char filename[] = "test2.bmp";
     const char outSeq[] = "out_seq.bmp";
     const char outThreaded[] = "out_threaded.bmp";
     const char outOmp[] = "out_omp.bmp";
-    int x1, y1, x2, y2, thick;
-    int numPoints, maxX, maxY;
-    std::string csvFile;
+    LARGE_INTEGER frequency, start, end;
+    QueryPerformanceFrequency(&frequency);
 
     try {
+
         BMP bmp = readBMP(filename);
-        maxX = bmp.infoHeader.width;
-        maxY = bmp.infoHeader.height;
-        std::cout << "Wybierz scenariusz:" << std::endl;
-        std::cout << "1. Wczytanie punktów z pliku CSV" << std::endl;
-        std::cout << "2. Generowanie punktów losowo" << std::endl;
-        int choice;
-        std::cin >> choice;
 
-        std::vector<Point> points;
+        std::cout << "Rozmiar pliku: "
+            << bmp.infoHeader.width << "x"
+            << bmp.infoHeader.height << " pixels\n";
 
-        if (choice == 1) {
-            std::cout << "Podaj nazwe pliku CSV: ";
-            std::cin >> csvFile;
-            points = readPointsFromCSV(csvFile);
-        }
-        else if (choice == 2) {
-            std::cout << "Podaj liczbe punktow: ";
-            std::cin >> numPoints;
-            points = generateRandomPoints(numPoints, maxX, maxY);
-        }
-        else {
-            throw std::invalid_argument("Niepoprawny wybor.");
-        }
-
-        std::cout << "Podaj grubosc łamanej [px]: ";
+        std::cout << "Podaj wspolrzedne punktu A" << std::endl;
+        std::cout << "x: ";
+        std::cin >> x1;
+        std::cout << "y: ";
+        std::cin >> y1;
+        std::cout << "Podaj wspolrzedne punktu B" << std::endl;
+        std::cout << "x: ";
+        std::cin >> x2;
+        std::cout << "y: ";
+        std::cin >> y2;
+        std::cout << "Podaj grubosc lini[px]";
         std::cin >> thick;
-
-        // Rysowanie łamanej w różnych wersjach
+		std::cout << "Podaj ilosc fragmentow odcinka: ";
+        std::cin >> watki;
 
         // SEKWENCYJNIE
         BMP bmp1 = readBMP(filename);
-        LARGE_INTEGER start, end, frequency;
-		QueryPerformanceFrequency(&frequency);
-
+        LARGE_INTEGER start, end;
         QueryPerformanceCounter(&start);
-        drawPolyline(bmp1, points, thick, 255, 0, 0);
+        drawLine(bmp1, x1, y1, x2, y2, thick, 255, 0, 0);
         QueryPerformanceCounter(&end);
         double t_seq = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
         std::cout << "Czas SEKWENCYJNY: " << t_seq << " ms\n";
@@ -296,20 +295,20 @@ int main() {
         delete[] bmp1.data;
 
         // THREADED
-        int watki = 4;
+       
         BMP bmp2 = readBMP(filename);
         QueryPerformanceCounter(&start);
-        drawPolyline(bmp2, points, thick, 0, 255, 0);
+        drawLineThreaded(bmp2, x1, y1, x2, y2, thick, 0, 255, 0, watki);
         QueryPerformanceCounter(&end);
         double t_thr = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
-        std::cout << "Czas THREADED(" << watki << " watki): " << t_thr << " ms\n";
+        std::cout << "Czas THREADED ("<< watki << " watki): " << t_thr << " ms\n";
         saveBMP(outThreaded, bmp2);
         delete[] bmp2.data;
 
         // OPENMP
         BMP bmp3 = readBMP(filename);
         QueryPerformanceCounter(&start);
-        drawPolyline(bmp3, points, thick, 0, 0, 255);
+        drawLineOpenMP(bmp3, x1, y1, x2, y2, thick, 0, 0, 255, watki);
         QueryPerformanceCounter(&end);
         double t_omp = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
         std::cout << "Czas OpenMP: " << t_omp << " ms\n";
@@ -318,9 +317,8 @@ int main() {
 
     }
     catch (const std::exception& e) {
-        std::cerr << "Błąd: " << e.what() << "\n";
+        std::cerr << "Blad: " << e.what() << "\n";
     }
 
     return 0;
 }
-
