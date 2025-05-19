@@ -6,7 +6,10 @@
 #include <ctime>
 #include <windows.h>
 #pragma pack(push, 1)
-
+#include <thread>
+#include <omp.h>
+#include <mutex>
+#include <atomic>
 struct BMPHeader {
     uint16_t type;
     uint32_t size;
@@ -44,6 +47,16 @@ std::vector<std::vector<RGB>> image;
 std::vector<std::vector<bool>> visited;
 int width, height;
 
+std::mutex visited_mutex;
+
+std::vector<std::pair<int, int>> get_starting_points() {
+    std::vector<std::pair<int, int>> points;
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+            if (!visited[y][x] && image[y][x] != BLACK)
+                points.emplace_back(x, y);
+    return points;
+}
 bool is_inside(int x, int y) {
     return x >= 0 && y >= 0 && x < width && y < height;
 }
@@ -107,6 +120,68 @@ bool is_closed_shape(int x, int y) {
 
     return !touches_edge;
 }
+void fill_shapes_threaded(int num_threads) {
+    auto points = get_starting_points();
+    size_t idx = 0;
+
+    auto worker = [&]() {
+        while (true) {
+            size_t i;
+            {
+                //std::lock_guard<std::mutex> lock(visited_mutex);
+                if (idx >= points.size()) return;
+                i = idx++;
+            }
+            int x = points[i].first;
+            int y = points[i].second;
+            bool should_fill = false;
+            {
+                //std::lock_guard<std::mutex> lock(visited_mutex);
+                if (!visited[y][x] && image[y][x] != BLACK) {
+                    visited[y][x] = true;
+                    should_fill = true;
+                }
+            }
+            if (should_fill) {
+                is_closed_shape(x, y);
+            }
+        }
+        };
+
+    std::vector<std::thread> threads;
+    for (int t = 0; t < num_threads; ++t)
+        threads.emplace_back(worker);
+    for (auto& th : threads)
+        th.join();
+}
+
+
+
+void fill_shapes_openmp(int num_threads) {
+    auto points = get_starting_points();
+    size_t n = points.size();
+
+#pragma omp parallel for num_threads(num_threads) schedule(dynamic)
+    for (int i = 0; i < static_cast<int>(n); ++i) {
+        int x = points[i].first;
+        int y = points[i].second;
+        bool should_fill = false;
+        {
+            //std::lock_guard<std::mutex> lock(visited_mutex);
+            if (!visited[y][x] && image[y][x] != BLACK) {
+                visited[y][x] = true;
+                should_fill = true;
+            }
+        }
+        if (should_fill) {
+            is_closed_shape(x, y);
+        }
+    }
+}
+
+
+
+
 
 void read_bmp(const std::string& filename) {
     std::ifstream in(filename, std::ios::binary);
@@ -180,12 +255,13 @@ void write_bmp(const std::string& filename) {
 
 int main() {
     LARGE_INTEGER start, end, frequency;
+    int num_parts;
     QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&start);
     srand(time(0));
-
-
     read_bmp("ksztalty.bmp");
+ 
+    std::cout << "Podaj liczbe czesci/watkow (1-500): ";
+    std::cin >> num_parts;
     QueryPerformanceCounter(&start);
     for (int y = 0; y < height; ++y)
         for (int x = 0; x < width; ++x)
@@ -197,6 +273,37 @@ int main() {
     std::cout << "Czas SEKWENCYJNY: " << (t_seq / 1000.0) << " s\n";
     write_bmp("output.bmp");
     std::cout << "Saved to " << "output.bmp" << "\n";
+
+    // --- THREADED ---
+    // Reset visited and reload image
+    read_bmp("ksztalty.bmp");
+    for (auto& row : visited)
+        std::fill(row.begin(), row.end(), false);
+
+    QueryPerformanceCounter(&start);
+    fill_shapes_threaded(num_parts);
+    QueryPerformanceCounter(&end);
+    double t_threaded = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
+    std::cout << "Czas WATKI: " << t_threaded << " ms\n";
+    std::cout << "Czas WATKI: " << (t_threaded / 1000.0) << " s\n";
+    write_bmp("outputthreaded.bmp");
+    std::cout << "Saved to outputthreaded.bmp\n";
+
+    // --- OPENMP ---
+    // Reset visited and reload image
+    read_bmp("ksztalty.bmp");
+    for (auto& row : visited)
+        std::fill(row.begin(), row.end(), false);
+
+    QueryPerformanceCounter(&start);
+    fill_shapes_openmp(num_parts);
+    QueryPerformanceCounter(&end);
+    double t_openmp = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
+    std::cout << "Czas OPENMP: " << t_openmp << " ms\n";
+    std::cout << "Czas OPENMP: " << (t_openmp / 1000.0) << " s\n";
+    write_bmp("outputopenmp.bmp");
+    std::cout << "Saved to outputopenmp.bmp\n";
+
 
     return 0;
 }
