@@ -491,14 +491,13 @@ void test_line_rasterization_lengths_openmp() {
     std::cout << "Wyniki (openmp) zapisane do " << outCSV << "\n";
 }
 
-void PolyLineSeq() {
+void PolyLineSeq(const std::vector<Point>& points) {
     try {
         // Read points from CSV
-        std::vector<Point> points = readPointsFromCSV("punkty.csv");
 
         // Prepare CSV output
-        std::ofstream results("poly.csv");
-
+        std::ofstream results("poly_random1500.csv");
+		results << "thickness,sequential\n" << 1500 << "\n";
         // Loop over thickness values
         for (double thick = 1.0; thick <= 50; thick += 1) {
             BMP bmp1 = readBMP("input.bmp");
@@ -528,11 +527,11 @@ void PolyLineSeq() {
     }
 }
 void PolyLineThreaded(const std::vector<Point>& points) {
-    const char* outCSV = "poly_threaded.csv";
+    const char* outCSV = "poly_threaded_random1500.csv";
     const std::vector<int> threadCounts = { 2, 4, 7, 8, 9, 10, 16, 32, 64, 128, 256 };
 
     std::ofstream results(outCSV);
-    results << "thickness,threads,threaded\n";
+    results << "thickness,threads,threaded\n" << 1500 << "\n";
 
     for (int thick = 1; thick <= 50; ++thick) {
         for (int numThreads : threadCounts) {
@@ -558,11 +557,11 @@ void PolyLineThreaded(const std::vector<Point>& points) {
 }
 
 void PolyLineOpenMP(const std::vector<Point>& points) {
-    const char* outCSV = "poly_openmp.csv";
+    const char* outCSV = "poly_openmp_random1500.csv";
     const std::vector<int> threadCounts = { 2, 4, 7, 8, 9, 10, 16, 32, 64, 128, 256 };
 
     std::ofstream results(outCSV);
-    results << "thickness,threads,openmp\n";
+    results << "thickness,threads,openmp\n" << 1500 << "\n";
 
     for (int thick = 1; thick <= 50; ++thick) {
         for (int numThreads : threadCounts) {
@@ -607,83 +606,15 @@ int main() {
     //test_line_rasterization_lengths_openmp();
 
     //PolyLineSeq(); // sequential
-    PolyLineThreaded(points); // threaded
-    PolyLineOpenMP(points);
+    //PolyLineThreaded(points); // threaded
+    //PolyLineOpenMP(points);
+
+    //points = generateRandomPoints(1500, 512, 512);
+    //PolyLineSeq(points);
+    //PolyLineThreaded(points); // threaded
+    //PolyLineOpenMP(points);
     
 
-/*
-    try {
-        BMP bmp = readBMP(filename);
-        maxX = bmp.infoHeader.width;
-        maxY = bmp.infoHeader.height;
-
-        std::cout << "Wybierz scenariusz:" << std::endl;
-        std::cout << "1. Wczytanie punktów z pliku CSV" << std::endl;
-        std::cout << "2. Generowanie punktow losowo" << std::endl;
-        int choice;
-        std::cin >> choice;
-
-        std::vector<Point> points;
-
-        if (choice == 1) {
-            std::cout << "Podaj nazwe pliku CSV: ";
-            std::cin >> csvFile;
-            points = readPointsFromCSV(csvFile);
-        }
-        else if (choice == 2) {
-            std::cout << "Podaj liczbe punktow: ";
-            std::cin >> numPoints;
-            points = generateRandomPoints(numPoints, maxX, maxY);
-        }
-        else {
-            throw std::invalid_argument("Niepoprawny wybor.");
-        }
-
-        std::cout << "Podaj grubosc lamanej [px]: ";
-        std::cin >> thick;
-
-        std::cout << "Podaj liczbe grup: ";
-        std::cin >> numThreads;
-
-        // Rysowanie łamanej w różnych wersjach
-
-        // SEKWENCYJNIE
-        BMP bmp1 = readBMP(filename);
-        LARGE_INTEGER start, end, frequency;
-        QueryPerformanceFrequency(&frequency);
-        QueryPerformanceCounter(&start);
-        drawPolyline(bmp1, points, thick, 255, 0, 0);
-        QueryPerformanceCounter(&end);
-        double t_seq = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
-        std::cout << "Czas SEKWENCYJNY: " << t_seq << " ms\n";
-        saveBMP(outSeq, bmp1);
-        delete[] bmp1.data;
-
-        // THREADED
-        BMP bmp2 = readBMP(filename);
-        QueryPerformanceCounter(&start);
-        drawPolylineThreaded(bmp2, points, thick, 0, 255, 0, numThreads);
-        QueryPerformanceCounter(&end);
-        double t_thr = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
-        std::cout << "Czas THREADED(" << numThreads << " watki): " << t_thr << " ms\n";
-        saveBMP(outThreaded, bmp2);
-        delete[] bmp2.data;
-
-        // OPENMP
-        BMP bmp3 = readBMP(filename);
-        QueryPerformanceCounter(&start);
-        drawPolylineOpenMP(bmp3, points, thick, 0, 0, 255, numThreads);
-        QueryPerformanceCounter(&end);
-        double t_omp = (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
-        std::cout << "Czas OpenMP: " << t_omp << " ms\n";
-        saveBMP(outOmp, bmp3);
-        delete[] bmp3.data;
-
-    }
-    catch (const std::exception& e) {
-        std::cerr << "Blad: " << e.what() << "\n";
-    }
-    */
     return 0;
 }
 
